@@ -26,6 +26,7 @@ export const COMPANIES = [
   "Astor",
   "TRCharge",
   "5Şarj",
+  "OtoPriz",
   "RotaWatt",
   "Evde Şarj",
   "Diğer"
