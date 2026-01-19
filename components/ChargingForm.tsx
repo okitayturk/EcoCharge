@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Calculator } from 'lucide-react';
+import { PlusCircle } from 'lucide-react';
 import { COMPANIES, FormData } from '../types';
 
 interface ChargingFormProps {
@@ -18,18 +18,21 @@ const initialForm: FormData = {
 export const ChargingForm: React.FC<ChargingFormProps> = ({ onAddSession }) => {
   const [formData, setFormData] = useState<FormData>(initialForm);
 
-  // Otomatik hesaplama: kWh ve Birim Fiyat girildiyse Toplam Tutarı öner
+  // Otomatik hesaplama: kWh veya Birim Fiyat değiştiğinde Toplam Tutarı anında güncelle
   useEffect(() => {
     const kwh = parseFloat(formData.totalKwh);
     const price = parseFloat(formData.pricePerKwh);
     
-    if (!isNaN(kwh) && !isNaN(price) && kwh > 0 && price > 0) {
-      // Eğer kullanıcı manuel olarak tutar girmediyse veya hesaplanan ile eşleşmiyorsa, otomatik güncelleme yapılabilir
-      // Ancak kullanıcı deneyimi için sadece placeholder veya öneri olarak bırakmak bazen daha iyidir.
-      // Burada kullanıcı kolaylığı için, eğer toplam tutar boşsa dolduralım.
-      if (formData.totalCost === '') {
-         setFormData(prev => ({ ...prev, totalCost: (kwh * price).toFixed(2) }));
-      }
+    // Her iki alan da geçerli bir sayı ise hesapla ve yaz
+    if (!isNaN(kwh) && !isNaN(price)) {
+       const calculatedCost = (kwh * price).toFixed(2);
+       // Sadece değer farklıysa güncelle (gereksiz render önlemek için)
+       setFormData(prev => {
+         if (prev.totalCost !== calculatedCost) {
+           return { ...prev, totalCost: calculatedCost };
+         }
+         return prev;
+       });
     }
   }, [formData.totalKwh, formData.pricePerKwh]);
 
@@ -135,29 +138,14 @@ export const ChargingForm: React.FC<ChargingFormProps> = ({ onAddSession }) => {
 
         {/* Toplam Tutar */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700 flex justify-between">
-            <span>Toplam Tutar (₺)</span>
-            <span className="text-xs text-emerald-600 flex items-center gap-1 cursor-pointer" 
-                  onClick={() => {
-                    const kwh = parseFloat(formData.totalKwh);
-                    const price = parseFloat(formData.pricePerKwh);
-                    if (!isNaN(kwh) && !isNaN(price)) {
-                      setFormData(prev => ({...prev, totalCost: (kwh*price).toFixed(2)}));
-                    }
-                  }}>
-              <Calculator size={12}/> Hesapla
-            </span>
-          </label>
+          <label className="text-sm font-medium text-gray-700">Toplam Tutar (₺)</label>
           <input
             type="number"
             name="totalCost"
             placeholder="0.00"
-            required
-            step="0.01"
-            min="0"
+            readOnly
             value={formData.totalCost}
-            onChange={handleChange}
-            className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition font-semibold text-emerald-900"
+            className="w-full p-4 bg-gray-100 border border-gray-200 rounded-xl focus:outline-none cursor-not-allowed font-bold text-emerald-900"
           />
         </div>
 
