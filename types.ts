@@ -23,6 +23,9 @@ export const COMPANIES = [
   "Trugo",
   "Voltrun",
   "Tesla Supercharger",
+  "Astor",
+  "TRCharge",
+  "5Şarj",
   "RotaWatt",
   "Evde Şarj",
   "Diğer"
