@@ -96,7 +96,7 @@ export const Charts: React.FC<ChartsProps> = ({ sessions, isAllTime }) => {
   const chartTitle = isAllTime ? "Aylara Göre Toplam Harcama (₺)" : "Günlük Harcama (₺)";
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+    <div className="grid grid-cols-1 gap-8 mb-8">
       {/* Harcama Grafiği */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100">
         <h3 className="text-lg font-bold text-gray-800 mb-6">{chartTitle}</h3>
