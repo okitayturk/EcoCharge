@@ -1,51 +1,57 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Zap, Leaf, Filter, Calendar } from 'lucide-react';
-import { ChargingSession, FormData } from './types';
+import { Zap, Leaf, Filter, Calendar, Database } from 'lucide-react';
+import { ChargingSession, FormData, COMPANIES } from './types';
 import { ChargingForm } from './components/ChargingForm';
 import { ChargingHistory } from './components/ChargingHistory';
 import { StatsCards } from './components/StatsCards';
 import { Charts } from './components/Charts';
-import { db } from './db';
+import { getSessions, addSession, deleteSession, bulkAddSessions } from './db';
 
 const App: React.FC = () => {
   const [sessions, setSessions] = useState<ChargingSession[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const [loading, setLoading] = useState<boolean>(true);
 
-  // Uygulama açıldığında veritabanından verileri çek
+  // Load data from Firebase
+  const loadSessions = async () => {
+    try {
+      setLoading(true);
+      const allSessions = await getSessions();
+      // Sort: Newest first
+      allSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setSessions(allSessions);
+    } catch (error) {
+      console.error("Veri çekilemedi:", error);
+      alert("Veriler yüklenirken bir hata oluştu.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadSessions = async () => {
-      try {
-        const allSessions = await db.sessions.toArray();
-        // Tarihe göre yeniden eskiye sırala
-        allSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setSessions(allSessions);
-      } catch (error) {
-        console.error("Veritabanından veri çekilemedi:", error);
-      }
-    };
     loadSessions();
   }, []);
 
-  // Mevcut kayıtlardan benzersiz ayları çıkar (YYYY-MM formatında)
+  // Extract unique months (YYYY-MM)
   const availableMonths = useMemo(() => {
     const months = new Set<string>();
     sessions.forEach(s => {
-      // s.date formatı "2024-05-20" şeklindedir, ilk 7 karakter "2024-05" verir.
       months.add(s.date.substring(0, 7));
     });
-    // Ayları yeniden eskiye sırala
     return Array.from(months).sort().reverse();
   }, [sessions]);
 
-  // Seçili aya göre oturumları filtrele
+  // Filter sessions by selected month
   const filteredSessions = useMemo(() => {
     if (selectedMonth === 'all') return sessions;
     return sessions.filter(s => s.date.startsWith(selectedMonth));
   }, [sessions, selectedMonth]);
 
   const handleAddSession = async (data: FormData) => {
+    const newId = crypto.randomUUID();
+    
     const newSession: ChargingSession = {
-      id: crypto.randomUUID(),
+      id: newId,
       company: data.company,
       date: data.date,
       durationMinutes: parseInt(data.durationMinutes),
@@ -55,21 +61,24 @@ const App: React.FC = () => {
     };
 
     try {
-      await db.sessions.add(newSession);
+      // Add to Firebase
+      await addSession(newSession);
+      
+      // Update local state
       setSessions(prev => {
         const updated = [newSession, ...prev];
         return updated.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       });
     } catch (error) {
       console.error("Kayıt eklenirken hata:", error);
-      alert("Veritabanına kaydedilemedi.");
+      alert("Kayıt eklenemedi.");
     }
   };
 
   const handleDeleteSession = async (id: string) => {
     if (window.confirm("Bu kaydı silmek istediğinize emin misiniz?")) {
       try {
-        await db.sessions.delete(id);
+        await deleteSession(id);
         setSessions(prev => prev.filter(s => s.id !== id));
       } catch (error) {
         console.error("Silme işlemi başarısız:", error);
@@ -78,7 +87,53 @@ const App: React.FC = () => {
     }
   };
 
-  // Ay ismini formatla (örn: "2024-05" -> "Mayıs 2024")
+  const handleSeedData = async () => {
+    if (!window.confirm("Veritabanına 10 adet örnek şarj kaydı eklenecek. Emin misiniz?")) return;
+    
+    setLoading(true);
+    try {
+        const today = new Date();
+        const newSessions: ChargingSession[] = [];
+        
+        for (let i = 0; i < 10; i++) {
+            const id = crypto.randomUUID();
+            const date = new Date(today);
+            date.setDate(date.getDate() - Math.floor(Math.random() * 60));
+            const dateStr = date.toISOString().split('T')[0];
+            
+            const company = COMPANIES[Math.floor(Math.random() * COMPANIES.length)];
+            const duration = Math.floor(Math.random() * 120) + 15;
+            const totalKwh = Math.floor(Math.random() * 60) + 10;
+            
+            const basePrice = 6 + Math.random() * 4;
+            const pricePerKwh = parseFloat(basePrice.toFixed(2));
+            const totalCost = parseFloat((totalKwh * pricePerKwh).toFixed(2));
+
+            newSessions.push({
+                id,
+                company,
+                date: dateStr,
+                durationMinutes: duration,
+                pricePerKwh,
+                totalKwh,
+                totalCost
+            });
+        }
+
+        await bulkAddSessions(newSessions);
+        
+        // Refresh data
+        await loadSessions();
+        
+        alert("Demo veriler başarıyla eklendi.");
+    } catch (error) {
+        console.error("Demo veri ekleme hatası:", error);
+        alert("Demo veriler eklenemedi.");
+    } finally {
+        setLoading(false);
+    }
+  };
+
   const formatMonthLabel = (dateStr: string) => {
     const date = new Date(dateStr + "-01");
     return date.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
@@ -101,9 +156,19 @@ const App: React.FC = () => {
             </div>
           </div>
           
-          <div className="hidden md:flex items-center space-x-2 text-emerald-800 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100">
-            <Leaf size={16} />
-            <span className="text-sm font-semibold">Doğa Dostu Sürüş</span>
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={handleSeedData}
+              className="hidden md:flex items-center space-x-2 text-emerald-800 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100 hover:bg-emerald-100 transition-colors"
+              title="Demo Verisi Yükle"
+            >
+              <Database size={16} />
+              <span className="text-sm font-semibold">Demo Veri</span>
+            </button>
+            <div className="hidden md:flex items-center space-x-2 text-emerald-800 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100">
+              <Leaf size={16} />
+              <span className="text-sm font-semibold">Doğa Dostu Sürüş</span>
+            </div>
           </div>
         </div>
       </header>
@@ -120,7 +185,8 @@ const App: React.FC = () => {
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="appearance-none bg-white border border-emerald-200 text-emerald-900 py-2.5 pl-10 pr-10 rounded-xl font-medium shadow-sm hover:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition cursor-pointer"
+              disabled={loading}
+              className="appearance-none bg-white border border-emerald-200 text-emerald-900 py-2.5 pl-10 pr-10 rounded-xl font-medium shadow-sm hover:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition cursor-pointer disabled:opacity-50"
             >
               <option value="all">Tüm Zamanlar</option>
               {availableMonths.map(month => (
@@ -133,7 +199,14 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Özet Kartlar (Filtrelenmiş veriyi kullanır) */}
+        {/* Yükleniyor Göstergesi */}
+        {loading && (
+          <div className="text-center py-4 mb-4">
+             <span className="text-emerald-600 font-medium animate-pulse">Veriler yükleniyor...</span>
+          </div>
+        )}
+
+        {/* Özet Kartlar */}
         <StatsCards sessions={filteredSessions} />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -156,7 +229,6 @@ const App: React.FC = () => {
 
           {/* Sağ Kolon: Tablo ve Grafikler */}
           <div className="lg:col-span-8 xl:col-span-8">
-            {/* Charts'a filtrelenmiş veri ve "Tüm Zamanlar" modunda olup olmadığımızı gönderiyoruz */}
             <Charts 
               sessions={filteredSessions} 
               isAllTime={selectedMonth === 'all'} 
